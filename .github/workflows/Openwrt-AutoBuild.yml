@@ -10,7 +10,12 @@ name: Build OpenWrt
 
 on: 
   repository_dispatch:
-
+  workflow_dispatch:
+    inputs:
+      target:
+      description: 'Target device folder'
+      required: true
+      default: 'qualcommbe_ipq53xx'
 env:
   REPO_TOKEN: ${{ secrets.TOKEN_KIDDIN9 }}
   PPPOE_USERNAME: ${{ secrets.PPPOE_USERNAME }}
@@ -31,7 +36,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: ["${{ github.event.client_payload.target }}"]
+        target: ["${{ github.event.inputs.target || github.event.client_payload.target || 'qualcommbe_ipq53xx' }}"]
         
     steps:
     - name: Checkout
@@ -103,6 +108,24 @@ jobs:
         git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
         git config --global user.name "github-actions[bot]"
 
+      - name: Install Honk Toolchain & BTF Tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gawk clang llvm dwarves libelf-dev libbpf-dev pkg-config cmake libclang-dev
+          curl -fsSL https://ziglang.org/download/0.14.1/zig-linux-x86_64-0.14.1.tar.xz -o /tmp/zig.tar.xz
+          sudo tar -xf /tmp/zig.tar.xz -C /usr/local
+          sudo ln -sf /usr/local/zig-linux-x86_64-0.14.1/zig /usr/local/bin/zig
+          rm -f /tmp/zig.tar.xz
+          zig version
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+          export PATH="$HOME/.cargo/bin:$PATH"
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          rustup toolchain install nightly --component rust-src
+          rustc --version
+          cargo --version
+          cargo install bpf-linker --version 0.11.0 --locked || cargo install bpf-linker --version 0.11.0
+          bpf-linker --version
+          
     - name: Get current date
       id: date
       run: |
@@ -207,7 +230,8 @@ jobs:
       run: |
         cd openwrt
         make defconfig
-        if [[ ! "${{matrix.target}}" =~ (amlogic_meson8b|armsr_armv8|bcm27xx_*|rockchip_armv8|sunxi_*|x86_*|siflower_*) ]]; then
+          yes "" | make kernel_oldconfig V=s || true
+        if [[ ! "${{matrix.target}}" =~ qualcommbe_*|(amlogic_meson8b|armsr_armv8|bcm27xx_*|rockchip_armv8|sunxi_*|x86_*|siflower_*) ]]; then
         sed -n '/# Wireless Drivers/,/# end of Wireless Drivers/p' .config | sed -e 's/=m/=n/' >>.config
         sed -i "s/\(kmod-qca.*\)=m/\1=n/" .config
         make defconfig
@@ -237,7 +261,26 @@ jobs:
         rm -rf staging_dir/toolchain-*/bin/*openwrt-linux-musl-lto-dump
         rm -rf staging_dir/toolchain-*/initial
         df -hT
-
+      - name: Verify Firmware & Manifest
+        run: |
+          cd openwrt
+          echo "=== SHA256 Checksums ==="
+          sha256sum bin/targets/qualcommbe/ipq53xx/*jdcloud_re-cs-06* || true
+          echo "=== Kernel FIT Size Check (<= 7168K) ==="
+          ls -lh bin/targets/qualcommbe/ipq53xx/*kernel* || true
+          for f in bin/targets/qualcommbe/ipq53xx/*kernel*; do
+            if [ -f "$f" ]; then
+              kb=$(( ($(stat -c%s "$f") + 1023) / 1024 ))
+              echo "$f: ${kb}K (limit 7168K)"
+              if [ "$kb" -gt 7168 ]; then echo "WARNING: Kernel FIT size ${kb}K > 7168K"; fi
+            fi
+          done
+          echo "=== Kernel 6.18 & BTF Config ==="
+          grep -E "CONFIG_DEBUG_INFO_BTF|Linux/arm64|CONFIG_VERSION_DIST" build_dir/target-*/linux-qualcommbe_ipq53xx/linux-6.18*/.config || true
+          head -n 5 build_dir/target-*/linux-qualcommbe_ipq53xx/linux-6.18*/.config || true
+          echo "=== Package Manifest ==="
+          cat bin/targets/qualcommbe/ipq53xx/*.manifest || true
+          
     - name: Organize files
       id: organize
       continue-on-error: true
