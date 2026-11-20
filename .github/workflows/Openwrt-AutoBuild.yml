@@ -112,9 +112,9 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y gawk clang llvm dwarves libelf-dev libbpf-dev pkg-config cmake libclang-dev
-        curl -fsSL https://ziglang.org/download/0.14.1/zig-linux-x86_64-0.14.1.tar.xz -o /tmp/zig.tar.xz
+        curl -fsSL https://ziglang.org/download/0.14.1/zig-x86_64-linux-0.14.1.tar.xz -o /tmp/zig.tar.xz
         sudo tar -xf /tmp/zig.tar.xz -C /usr/local
-        sudo ln -sf /usr/local/zig-linux-x86_64-0.14.1/zig /usr/local/bin/zig
+        sudo ln -sf /usr/local/zig-x86_64-linux-0.14.1/zig /usr/local/bin/zig
         rm -f /tmp/zig.tar.xz
         zig version
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
@@ -123,9 +123,12 @@ jobs:
         rustup toolchain install nightly --component rust-src
         rustc --version
         cargo --version
-        cargo install bpf-linker --version 0.11.0 --locked || cargo install bpf-linker --version 0.11.0
-        bpf-linker --version
-          
+     - name: Install bpf-linker 0.11.0
+       uses: taiki-e/install-action@v2
+       with:
+       tool: bpf-linker@0.11.0
+    - name: Verify Honk Toolchain
+      run: zig version && rustc --version && cargo --version && bpf-linker --version
     - name: Get current date
       id: date
       run: |
