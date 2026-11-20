@@ -13,9 +13,9 @@ on:
   workflow_dispatch:
     inputs:
       target:
-      description: 'Target device folder'
-      required: true
-      default: 'qualcommbe_ipq53xx'
+        description: 'Target device folder'
+        required: true
+        default: 'qualcommbe_ipq53xx'
 env:
   REPO_TOKEN: ${{ secrets.TOKEN_KIDDIN9 }}
   PPPOE_USERNAME: ${{ secrets.PPPOE_USERNAME }}
