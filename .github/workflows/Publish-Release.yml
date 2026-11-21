@@ -1,0 +1,45 @@
+name: Publish Release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Build 8 Artifact
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p release_files
+          gh run download 44763370497 --repo lingcui131/Kwrt --name 11.20_qualcommbe_ipq53xx --dir release_files
+          ls -lhR release_files
+
+      - name: Verify Kernel FIT Size and Prepare Files
+        run: |
+          mkdir -p dist
+          FACTORY=$(find release_files -name "*jdcloud_re-cs-06-squashfs-factory.bin" | head -n1)
+          SYSUP=$(find release_files -name "*jdcloud_re-cs-06-squashfs-sysupgrade.bin" | head -n1)
+          MANIFEST=$(find release_files -name "*jdcloud_re-cs-06.manifest" | head -n1)
+          echo "=== Kernel FIT Size Check ==="
+          tar -tvf "$SYSUP"
+          cp "$FACTORY" dist/jdcloud-be6500-squashfs-factory.bin
+          cp "$SYSUP" dist/jdcloud-be6500-squashfs-sysupgrade.bin
+          cp "$MANIFEST" dist/jdcloud-be6500.manifest
+          (cd dist && sha256sum jdcloud-be6500-squashfs-factory.bin jdcloud-be6500-squashfs-sysupgrade.bin jdcloud-be6500.manifest > SHA256SUMS.txt)
+          cat dist/SHA256SUMS.txt
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="jdcloud-be6500-25.12"
+          gh release delete "$TAG" --repo lingcui131/Kwrt --yes --cleanup-tag 2>/dev/null || true
+          gh release create "$TAG" dist/* \
+            --repo lingcui131/Kwrt \
+            --title "京东云be6500" \
+            --notes "京东云 BE6500 (JDCloud RE-CS-06, IPQ5322 + QCN9274, ath12k 开源无线, Linux 6.18.64 + BTF) OpenWrt 25.12 固件（来自 Build OpenWrt #8，尚未真机验证）。默认 LAN: 192.168.0.1/24 (DHCP开)，WAN: PPPoE，Honk 默认不自启。"
